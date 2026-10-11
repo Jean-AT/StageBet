@@ -57,13 +57,17 @@ public class OutboxPublisher {
     }
 
     private void publish(OutboxEvent event) {
-        kafka.send(topic, event.aggregateId().toString(), envelope(event)).whenComplete((ignored, failure) -> {
-            if (failure == null) {
-                markPublished(event.id());
-            } else {
-                markFailed(event, failure);
-            }
-        });
+        try {
+            kafka.send(topic, event.aggregateId().toString(), envelope(event)).whenComplete((ignored, failure) -> {
+                if (failure == null) {
+                    markPublished(event.id());
+                } else {
+                    markFailed(event, failure);
+                }
+            });
+        } catch (RuntimeException failure) {
+            markFailed(event, failure);
+        }
     }
 
     private void markPublished(UUID eventId) {

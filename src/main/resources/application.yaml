@@ -18,6 +18,9 @@ spring:
       port: ${REDIS_PORT:6379}
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
 management:
   endpoints:
     web:
@@ -51,3 +54,6 @@ stagebet:
     topic: ${WAGER_EVENTS_TOPIC:wager.events.v1}
     dead-letter-topic: ${WAGER_EVENTS_DLQ_TOPIC:wager.events.dlq.v1}
     publisher-delay-ms: ${WAGER_EVENTS_PUBLISHER_DELAY_MS:1000}
+    consumer-enabled: ${WAGER_EVENTS_CONSUMER_ENABLED:false}
+    consumer-name: ${WAGER_EVENTS_CONSUMER_NAME:stagebet-default-consumer}
+    consumer-group: ${WAGER_EVENTS_CONSUMER_GROUP:stagebet-default}

@@ -1,6 +1,7 @@
 package com.service.stagebet.messaging.application;
 
 import java.util.UUID;
+import java.util.function.Consumer;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -21,5 +22,14 @@ public class InboxService {
                 + "VALUES (:consumerName, :eventId, :correlationId) ON CONFLICT DO NOTHING",
                 new MapSqlParameterSource().addValue("consumerName", consumerName)
                         .addValue("eventId", eventId).addValue("correlationId", correlationId)) == 1;
+    }
+
+    @Transactional
+    public boolean process(String consumerName, ConsumedEvent event, Consumer<ConsumedEvent> handler) {
+        if (!claim(consumerName, event.eventId(), event.correlationId())) {
+            return false;
+        }
+        handler.accept(event);
+        return true;
     }
 }

@@ -1,7 +1,7 @@
 # WAGER-050 — Reliable messaging and settlement
 
 **Parent:** WAGER-000  
-**Status:** In Progress
+**Status:** Done
 **Dependencies:** WAGER-020, WAGER-030, WAGER-040
 
 ## Subtasks
@@ -16,8 +16,11 @@
 
 Implementation note: Kafka delivery is at-least-once; the outbox uniqueness constraint,
 wallet idempotency keys, bet state transitions, and inbox primary key provide one
-business effect. A Kafka listener integration remains a follow-up once event consumers
-are introduced.
+business effect. `KafkaEventConsumer` validates the versioned envelope, claims the inbox,
+and dispatches supported events inside the same transaction as the handler. It is
+disabled by default until a deployment registers its business handlers. Unsupported or
+malformed events fail before acknowledgement so Kafka can retry or route them to the
+configured dead-letter flow.
 
 ## Acceptance criteria
 
