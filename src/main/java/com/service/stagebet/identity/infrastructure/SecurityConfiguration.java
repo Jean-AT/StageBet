@@ -34,7 +34,12 @@ public class SecurityConfiguration {
     SecurityFilterChain jwtApiSecurity(HttpSecurity http) throws Exception {
         http.securityMatcher("/api/**")
                 .csrf(csrf -> csrf.disable())
-                .authorizeHttpRequests(auth -> auth.anyRequest().authenticated())
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/api/payments/webhooks/**").permitAll()
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                        .requestMatchers("/api/support/**").hasAnyRole("ADMIN", "SUPPORT")
+                        .requestMatchers("/api/operator/**").hasAnyRole("ADMIN", "OPERATOR")
+                        .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth -> oauth.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())));
         return http.build();
     }
