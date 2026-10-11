@@ -1,17 +1,23 @@
 # WAGER-060 — Identity, tenancy, and responsible gaming
 
 **Parent:** WAGER-000  
-**Status:** Backlog  
+**Status:** In Progress
 **Dependencies:** WAGER-010, WAGER-020
 
 ## Subtasks
 
-- [ ] Define tenant, operator, player, admin, and support roles.
-- [ ] Add OAuth2/JWT resource-server validation and authorization rules.
-- [ ] Enforce tenant ownership in commands, queries, indexes, and database constraints.
-- [ ] Add daily/session limits, self-exclusion, cool-off period, and account suspension.
-- [ ] Add audit records for administrative actions and sensitive changes.
+- [x] Define tenant, operator, player, admin, and support roles.
+- [x] Add OAuth2/JWT resource-server validation and authorization rules.
+- [x] Enforce tenant ownership in commands, queries, indexes, and database constraints.
+- [x] Add daily/session limits, self-exclusion, cool-off period, and account suspension.
+- [x] Add audit records for administrative actions and sensitive changes.
 - [ ] Add rate limiting and abuse protection at command boundaries.
+
+Implementation note: JWT validation is enabled when
+`spring.security.oauth2.resourceserver.jwt.issuer-uri` is configured. Responsible-gaming
+counters are row-locked and updated in the same transaction as bet placement, so a
+failed reservation rolls the counter update back. Distributed rate limiting remains a
+follow-up for the Redis boundary.
 
 ## Acceptance criteria
 

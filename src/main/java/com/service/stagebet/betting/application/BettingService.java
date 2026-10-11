@@ -2,6 +2,7 @@ package com.service.stagebet.betting.application;
 
 import com.service.stagebet.betting.domain.BetStatus;
 import com.service.stagebet.game.domain.RoundStatus;
+import com.service.stagebet.identity.application.ResponsibleGamingPolicy;
 import com.service.stagebet.messaging.application.EventPayload;
 import com.service.stagebet.messaging.application.OutboxEventStore;
 import com.service.stagebet.wallet.application.WalletCommand;
@@ -26,19 +27,26 @@ public class BettingService {
     private final NamedParameterJdbcTemplate jdbc;
     private final WalletOperationService wallet;
     private final OutboxEventStore outbox;
+    private final ResponsibleGamingPolicy responsibleGaming;
     private final Clock clock;
+
+    public BettingService(NamedParameterJdbcTemplate jdbc, WalletOperationService wallet,
+            OutboxEventStore outbox) {
+        this(jdbc, wallet, outbox, ResponsibleGamingPolicy.allowAll(), Clock.systemUTC());
+    }
 
     @Autowired
     public BettingService(NamedParameterJdbcTemplate jdbc, WalletOperationService wallet,
-            OutboxEventStore outbox) {
-        this(jdbc, wallet, outbox, Clock.systemUTC());
+            OutboxEventStore outbox, ResponsibleGamingPolicy responsibleGaming) {
+        this(jdbc, wallet, outbox, responsibleGaming, Clock.systemUTC());
     }
 
     BettingService(NamedParameterJdbcTemplate jdbc, WalletOperationService wallet,
-            OutboxEventStore outbox, Clock clock) {
+            OutboxEventStore outbox, ResponsibleGamingPolicy responsibleGaming, Clock clock) {
         this.jdbc = jdbc;
         this.wallet = wallet;
         this.outbox = outbox;
+        this.responsibleGaming = responsibleGaming;
         this.clock = clock;
     }
 
@@ -49,6 +57,7 @@ public class BettingService {
             return result(duplicate, true);
         }
         new Money(command.amount(), command.currency());
+        responsibleGaming.validateAndRecordBet(command.tenantId(), command.playerId(), command.amount());
 
         RoundRow round = lockRound(command.roundId());
         if (round.status() != RoundStatus.OPEN || round.eventSequence() != command.expectedRoundSequence()) {
