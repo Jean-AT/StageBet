@@ -23,7 +23,7 @@ jobs:
       - name: Verify default suite
         run: mvn -B verify
       - name: Build image
-        run: docker build --tag stagebet:${{ github.sha }} .
+        run: docker build --pull --tag stagebet:${{ github.sha }} .
       - name: Scan image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
