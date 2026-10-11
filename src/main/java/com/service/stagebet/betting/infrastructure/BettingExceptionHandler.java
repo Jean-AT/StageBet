@@ -1,5 +1,6 @@
 package com.service.stagebet.betting.infrastructure;
 
+import com.service.stagebet.identity.domain.RateLimitExceededException;
 import com.service.stagebet.identity.domain.ResponsibleGamingException;
 import com.service.stagebet.wallet.application.InsufficientFundsException;
 import java.time.Instant;
@@ -19,6 +20,11 @@ public class BettingExceptionHandler {
     @ExceptionHandler(ResponsibleGamingException.class)
     public ResponseEntity<ErrorResponse> responsibleGaming(ResponsibleGamingException exception) {
         return response(HttpStatus.UNPROCESSABLE_ENTITY, exception.getMessage());
+    }
+
+    @ExceptionHandler(RateLimitExceededException.class)
+    public ResponseEntity<ErrorResponse> rateLimitExceeded(RateLimitExceededException exception) {
+        return response(HttpStatus.TOO_MANY_REQUESTS, exception.getMessage());
     }
 
     @ExceptionHandler({IllegalArgumentException.class, NullPointerException.class})

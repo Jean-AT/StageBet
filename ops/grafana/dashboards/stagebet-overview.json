@@ -1,0 +1,21 @@
+{
+  "title": "StageBet overview",
+  "schemaVersion": 39,
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Bet and cash-out throughput",
+      "targets": [
+        { "expr": "sum(rate(stagebet_bets_total[5m]))", "legendFormat": "bets" },
+        { "expr": "sum(rate(stagebet_cashouts_total[5m]))", "legendFormat": "cash-outs" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "HTTP error rate",
+      "targets": [
+        { "expr": "sum(rate(http_server_requests_seconds_count{status=~\"5..\"}[5m]))", "legendFormat": "5xx" }
+      ]
+    }
+  ]
+}

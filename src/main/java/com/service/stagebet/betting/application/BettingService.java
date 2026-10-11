@@ -5,6 +5,7 @@ import com.service.stagebet.game.domain.RoundStatus;
 import com.service.stagebet.identity.application.ResponsibleGamingPolicy;
 import com.service.stagebet.messaging.application.EventPayload;
 import com.service.stagebet.messaging.application.OutboxEventStore;
+import com.service.stagebet.observability.application.BettingMetrics;
 import com.service.stagebet.wallet.application.WalletCommand;
 import com.service.stagebet.wallet.application.WalletOperationService;
 import com.service.stagebet.wallet.domain.Money;
@@ -29,31 +30,37 @@ public class BettingService {
     private final OutboxEventStore outbox;
     private final ResponsibleGamingPolicy responsibleGaming;
     private final Clock clock;
+    private final BettingMetrics metrics;
 
     public BettingService(NamedParameterJdbcTemplate jdbc, WalletOperationService wallet,
             OutboxEventStore outbox) {
-        this(jdbc, wallet, outbox, ResponsibleGamingPolicy.allowAll(), Clock.systemUTC());
+        this(jdbc, wallet, outbox, ResponsibleGamingPolicy.allowAll(), Clock.systemUTC(), null);
     }
 
     @Autowired
     public BettingService(NamedParameterJdbcTemplate jdbc, WalletOperationService wallet,
-            OutboxEventStore outbox, ResponsibleGamingPolicy responsibleGaming) {
-        this(jdbc, wallet, outbox, responsibleGaming, Clock.systemUTC());
+            OutboxEventStore outbox, ResponsibleGamingPolicy responsibleGaming, BettingMetrics metrics) {
+        this(jdbc, wallet, outbox, responsibleGaming, Clock.systemUTC(), metrics);
     }
 
     BettingService(NamedParameterJdbcTemplate jdbc, WalletOperationService wallet,
-            OutboxEventStore outbox, ResponsibleGamingPolicy responsibleGaming, Clock clock) {
+            OutboxEventStore outbox, ResponsibleGamingPolicy responsibleGaming, Clock clock,
+            BettingMetrics metrics) {
         this.jdbc = jdbc;
         this.wallet = wallet;
         this.outbox = outbox;
         this.responsibleGaming = responsibleGaming;
         this.clock = clock;
+        this.metrics = metrics;
     }
 
     @Transactional
     public BetResult placeBet(PlaceBetCommand command) {
         BetRow duplicate = findByPlacementKey(command.tenantId(), command.idempotencyKey());
         if (duplicate != null) {
+            if (metrics != null) {
+                metrics.recordBet(true);
+            }
             return result(duplicate, true);
         }
         new Money(command.amount(), command.currency());
@@ -76,6 +83,9 @@ public class BettingService {
         BetRow bet = new BetRow(command.betId(), command.roundId(), command.playerId(), command.amount(), command.currency().toUpperCase(),
                 BetStatus.ACCEPTED, holdId, round.eventSequence(), null, null, null);
         publish(bet, round.eventSequence(), null);
+        if (metrics != null) {
+            metrics.recordBet(false);
+        }
         return result(bet, false);
     }
 
@@ -83,6 +93,9 @@ public class BettingService {
     public BetResult cashOut(CashOutCommand command) {
         CashOutRow duplicate = findCashOut(command.tenantId(), command.idempotencyKey());
         if (duplicate != null) {
+            if (metrics != null) {
+                metrics.recordCashOut(true);
+            }
             return duplicate.result(true);
         }
 
@@ -114,6 +127,9 @@ public class BettingService {
                         .addValue("payout", payout));
         BetRow result = bet.withCashOut(round.eventSequence(), round.lastMultiplier(), payout);
         publish(result, round.eventSequence(), payout);
+        if (metrics != null) {
+            metrics.recordCashOut(false);
+        }
         return result(result, false);
     }
 

@@ -18,7 +18,28 @@ spring:
       port: ${REDIS_PORT:6379}
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  tracing:
+    sampling:
+      probability: ${OTEL_SAMPLING_PROBABILITY:1.0}
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}
+logging:
+  pattern:
+    level: "%5p [corr:%X{correlationId:-}]"
 stagebet:
+  rate-limit:
+    max-requests: ${WAGER_RATE_LIMIT_MAX_REQUESTS:20}
+    window: ${WAGER_RATE_LIMIT_WINDOW:PT1S}
   messaging:
     topic: ${WAGER_EVENTS_TOPIC:wager.events.v1}
     dead-letter-topic: ${WAGER_EVENTS_DLQ_TOPIC:wager.events.dlq.v1}
