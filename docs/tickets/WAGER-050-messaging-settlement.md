@@ -1,18 +1,23 @@
 # WAGER-050 — Reliable messaging and settlement
 
 **Parent:** WAGER-000  
-**Status:** Backlog  
+**Status:** In Progress
 **Dependencies:** WAGER-020, WAGER-030, WAGER-040
 
 ## Subtasks
 
-- [ ] Add transactional outbox for committed domain changes.
-- [ ] Publish versioned Kafka events with correlation and causation IDs.
-- [ ] Implement idempotent consumers and an inbox/processed-event record where needed.
-- [ ] Implement settlement for wins, losses, refunds, cancellation, and replay.
-- [ ] Add bounded retries with backoff and jitter.
-- [ ] Add dead-letter topics and a controlled replay command.
-- [ ] Document at-least-once delivery and exactly-once business effect.
+- [x] Add transactional outbox for committed domain changes.
+- [x] Publish versioned Kafka events with correlation and causation IDs.
+- [x] Add an inbox/processed-event record for idempotent consumers.
+- [x] Implement settlement for wins, losses, refunds, cancellation, and replay.
+- [x] Add bounded retries with backoff and jitter.
+- [x] Add dead-letter topics and a controlled replay command.
+- [x] Document at-least-once delivery and exactly-once business effect.
+
+Implementation note: Kafka delivery is at-least-once; the outbox uniqueness constraint,
+wallet idempotency keys, bet state transitions, and inbox primary key provide one
+business effect. A Kafka listener integration remains a follow-up once event consumers
+are introduced.
 
 ## Acceptance criteria
 

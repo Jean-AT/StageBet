@@ -18,3 +18,8 @@ spring:
       port: ${REDIS_PORT:6379}
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+stagebet:
+  messaging:
+    topic: ${WAGER_EVENTS_TOPIC:wager.events.v1}
+    dead-letter-topic: ${WAGER_EVENTS_DLQ_TOPIC:wager.events.dlq.v1}
+    publisher-delay-ms: ${WAGER_EVENTS_PUBLISHER_DELAY_MS:1000}
