@@ -12,7 +12,7 @@ This is the technology decision record for the project. It distinguishes depende
 | Web API | Spring Web MVC | Present | REST commands and queries. |
 | Real-time API | Spring WebSocket | Present | Publish authoritative Crash-round updates to clients. |
 | Primary database | PostgreSQL | Present | Source of truth for domain state, wallet, ledger, bets, and audit data. |
-| Persistence | Spring Data JPA | Selected | JPA is the application persistence approach and Spring Modulith's JPA event publication repository. Spring Data JDBC is intentionally not included to avoid duplicate event-publication repositories. |
+| Persistence | Spring Data JPA plus targeted Spring JDBC | Selected | JPA is the application persistence approach and Spring Modulith's JPA event publication repository. Targeted `NamedParameterJdbcTemplate` SQL is allowed for explicit row-locking and atomic balance updates. Spring Data JDBC repositories are intentionally not included to avoid duplicate event-publication repositories. |
 | Schema migration | Flyway | Present | Version all schema changes; never rely on auto-generated production schema. |
 | Cache/ephemeral state | Redis | Present | Cache, rate limiting, sessions, and short-lived coordination only; never the source of truth for money. |
 | Messaging | Kafka, Kafka Streams, Spring Kafka | Present | Durable domain events, outbox publication, retries, and dead-letter handling. |
