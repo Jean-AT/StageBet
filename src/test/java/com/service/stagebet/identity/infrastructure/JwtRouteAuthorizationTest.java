@@ -1,0 +1,83 @@
+package com.service.stagebet.identity.infrastructure;
+
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import com.service.stagebet.payments.infrastructure.StripeWebhookSignatureVerifier;
+import com.service.stagebet.payments.application.StripeWebhookService;
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
+import org.springframework.security.oauth2.jwt.BadJwtException;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.web.servlet.MockMvc;
+
+@SpringBootTest
+@AutoConfigureMockMvc
+@TestPropertySource(properties = "spring.security.oauth2.resourceserver.jwt.issuer-uri=https://issuer.example.test")
+class JwtRouteAuthorizationTest {
+
+    @Autowired private MockMvc mockMvc;
+    @Autowired private StripeWebhookSignatureVerifier signatureVerifier;
+    @MockitoBean private JwtDecoder jwtDecoder;
+    @MockitoBean private StripeWebhookService webhookService;
+
+    @Test
+    void protectedApiRejectsMissingAndInvalidTokens() throws Exception {
+        mockMvc.perform(get("/api/tenants/{tenantId}/players/{playerId}/bets", UUID.randomUUID(), UUID.randomUUID()))
+                .andExpect(status().isUnauthorized());
+
+        when(jwtDecoder.decode("invalid")).thenThrow(new BadJwtException("invalid test token"));
+        mockMvc.perform(get("/api/tenants/{tenantId}/players/{playerId}/bets", UUID.randomUUID(), UUID.randomUUID())
+                        .header("Authorization", "Bearer invalid"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void jwtChainEnforcesPrivilegedRoutes() throws Exception {
+        when(jwtDecoder.decode("player")).thenReturn(token("player", "PLAYER"));
+        when(jwtDecoder.decode("admin")).thenReturn(token("admin", "ADMIN"));
+
+        for (String path : List.of("/api/admin/check", "/api/support/check", "/api/operator/check")) {
+            mockMvc.perform(get(path).header("Authorization", "Bearer player"))
+                    .andExpect(status().isForbidden());
+            mockMvc.perform(get(path).header("Authorization", "Bearer admin"))
+                    .andExpect(status().isNotFound());
+        }
+    }
+
+    @Test
+    void signedStripeWebhookDoesNotRequireJwt() throws Exception {
+        String payload = "{\"id\":\"evt_" + UUID.randomUUID() + "\"}";
+        String signature = signatureVerifier.signatureForTests(payload, Instant.now());
+        when(webhookService.process(payload, signature))
+                .thenReturn(new StripeWebhookService.WebhookResult("evt_test", true, "ACCEPTED"));
+
+        mockMvc.perform(post("/api/payments/webhooks/stripe")
+                        .header("Stripe-Signature", signature)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isOk());
+    }
+
+    private Jwt token(String subject, String role) {
+        Instant now = Instant.now();
+        return Jwt.withTokenValue(subject)
+                .header("alg", "RS256")
+                .subject(subject)
+                .claim("roles", List.of(role))
+                .issuedAt(now)
+                .expiresAt(now.plusSeconds(300))
+                .build();
+    }
+}
