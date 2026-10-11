@@ -18,6 +18,8 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
+      - name: Start test infrastructure
+        run: docker compose up -d --wait --wait-timeout 120
       - name: Verify default suite
         run: mvn -B verify
       - name: Build image
