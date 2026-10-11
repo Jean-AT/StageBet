@@ -94,6 +94,7 @@ public class WalletOperationService {
         }
 
         WalletRow wallet = lockWallet(hold.walletId());
+        updateBalance(wallet.id(), BigDecimal.ZERO, hold.amount().negate());
         updateHoldStatus(holdId, "CAPTURED");
         WalletCommand command = new WalletCommand(tenantId, hold.playerId(), holdId, hold.amount(), hold.currency(),
                 idempotencyKey, actorId);
