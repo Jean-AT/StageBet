@@ -1,19 +1,19 @@
 # WAGER-080 — Payments, delivery, and portfolio documentation
 
 **Parent:** WAGER-000  
-**Status:** Backlog  
+**Status:** Done
 **Dependencies:** WAGER-050, WAGER-060, WAGER-070
 
 ## Subtasks
 
-- [ ] Define `PaymentGateway` port and local fake payment adapter.
-- [ ] Add Stripe Sandbox adapter for PaymentIntents, refunds, signed webhooks, duplicates, and failures.
-- [ ] Document that Stripe is sandbox-only and unsuitable as a production gambling provider.
-- [ ] Add Docker images and production-like configuration without real credentials.
-- [ ] Add GitHub Actions for build, tests, static checks, image build, and security scanning.
-- [ ] Document backup, restore, migration, replay, and incident procedures.
-- [ ] Write an English README with architecture diagram, setup, API examples, and demo script.
-- [ ] Record the five proof scenarios: concurrency, idempotency, outbox recovery, DLQ replay, and distributed tracing.
+- [x] Define `PaymentGateway` port and local fake payment adapter.
+- [x] Add Stripe Sandbox adapter for PaymentIntents, refunds, signed webhooks, duplicates, and failures.
+- [x] Document that Stripe is sandbox-only and unsuitable as a production gambling provider.
+- [x] Add Docker images and production-like configuration without real credentials.
+- [x] Add GitHub Actions for build, tests, static checks, image build, and security scanning.
+- [x] Document backup, restore, migration, replay, and incident procedures.
+- [x] Write an English README with architecture diagram, setup, API examples, and demo script.
+- [x] Record the five proof scenarios: concurrency, idempotency, outbox recovery, DLQ replay, and distributed tracing.
 
 ## Acceptance criteria
 

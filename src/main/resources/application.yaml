@@ -37,6 +37,13 @@ logging:
   pattern:
     level: "%5p [corr:%X{correlationId:-}]"
 stagebet:
+  payments:
+    stripe:
+      enabled: ${STRIPE_SANDBOX_ENABLED:false}
+      base-url: ${STRIPE_SANDBOX_BASE_URL:https://api.stripe.com}
+      secret-key: ${STRIPE_SANDBOX_SECRET_KEY:}
+      webhook-secret: ${STRIPE_SANDBOX_WEBHOOK_SECRET:local-webhook-secret}
+      signature-tolerance-seconds: ${STRIPE_WEBHOOK_TOLERANCE_SECONDS:300}
   rate-limit:
     max-requests: ${WAGER_RATE_LIMIT_MAX_REQUESTS:20}
     window: ${WAGER_RATE_LIMIT_WINDOW:PT1S}

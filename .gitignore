@@ -33,4 +33,8 @@ build/
 .vscode/
 
 .*
+!.dockerignore
+!.github/
+!.github/workflows/
+!.github/workflows/ci.yml
 skills/

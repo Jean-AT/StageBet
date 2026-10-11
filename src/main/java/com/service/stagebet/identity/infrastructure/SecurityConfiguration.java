@@ -19,6 +19,7 @@ public class SecurityConfiguration {
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/actuator/health", "/topic/**", "/ws/**").permitAll()
+                        .requestMatchers("/api/payments/webhooks/**").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/support/**").hasAnyRole("ADMIN", "SUPPORT")
                         .requestMatchers("/api/operator/**").hasAnyRole("ADMIN", "OPERATOR")
