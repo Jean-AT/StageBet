@@ -1,10 +1,12 @@
 package com.service.stagebet.wallet.application;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.time.OffsetDateTime;
-import java.util.Objects;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.UUID;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -14,6 +16,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class WalletOperationService {
 
+    private static final String LEGACY_REQUEST_HASH = "0000000000000000000000000000000000000000000000000000000000000000";
+
     private final NamedParameterJdbcTemplate jdbcTemplate;
 
     public WalletOperationService(NamedParameterJdbcTemplate jdbcTemplate) {
@@ -22,7 +26,8 @@ public class WalletOperationService {
 
     @Transactional
     public WalletOperationResult deposit(WalletCommand command) {
-        WalletOperationResult duplicate = findDuplicate(command, "DEPOSIT");
+        String requestHash = requestHash(command, "DEPOSIT");
+        WalletOperationResult duplicate = findDuplicate(command.tenantId(), command.idempotencyKey(), "DEPOSIT", requestHash);
         if (duplicate != null) {
             return duplicate;
         }
@@ -31,14 +36,16 @@ public class WalletOperationService {
         updateBalance(wallet.id(), command.money().amount(), BigDecimal.ZERO);
         UUID transactionId = insertTransaction(command, "DEPOSIT");
         insertLedgerEntry(transactionId, wallet.id(), "CREDIT", command.money().amount(), "DEPOSIT");
-        insertIdempotencyRecord(command, "DEPOSIT");
-        return result(command.referenceId(), wallet.id(), wallet.availableBalance().add(command.money().amount()),
+        WalletOperationResult result = result(command.referenceId(), wallet.id(), wallet.availableBalance().add(command.money().amount()),
                 wallet.reservedBalance(), wallet.currency(), false);
+        insertIdempotencyRecord(command.tenantId(), command.idempotencyKey(), "DEPOSIT", requestHash, result);
+        return result;
     }
 
     @Transactional
     public WalletOperationResult reserve(WalletCommand command) {
-        WalletOperationResult duplicate = findDuplicate(command, "RESERVE");
+        String requestHash = requestHash(command, "RESERVE");
+        WalletOperationResult duplicate = findDuplicate(command.tenantId(), command.idempotencyKey(), "RESERVE", requestHash);
         if (duplicate != null) {
             return duplicate;
         }
@@ -52,14 +59,16 @@ public class WalletOperationService {
         insertHold(wallet.id(), command);
         UUID transactionId = insertTransaction(command, "RESERVE");
         insertLedgerEntry(transactionId, wallet.id(), "DEBIT", command.money().amount(), "BET_RESERVATION");
-        insertIdempotencyRecord(command, "RESERVE");
-        return result(command.referenceId(), wallet.id(), wallet.availableBalance().subtract(command.money().amount()),
+        WalletOperationResult result = result(command.referenceId(), wallet.id(), wallet.availableBalance().subtract(command.money().amount()),
                 wallet.reservedBalance().add(command.money().amount()), wallet.currency(), false);
+        insertIdempotencyRecord(command.tenantId(), command.idempotencyKey(), "RESERVE", requestHash, result);
+        return result;
     }
 
     @Transactional
     public WalletOperationResult release(UUID tenantId, UUID holdId, UUID actorId, String idempotencyKey) {
-        WalletOperationResult duplicate = findDuplicate(tenantId, idempotencyKey, "RELEASE");
+        String requestHash = requestHash(tenantId, holdId, actorId, "RELEASE");
+        WalletOperationResult duplicate = findDuplicate(tenantId, idempotencyKey, "RELEASE", requestHash);
         if (duplicate != null) {
             return duplicate;
         }
@@ -76,14 +85,16 @@ public class WalletOperationService {
                 idempotencyKey, actorId);
         UUID transactionId = insertTransaction(command, "RELEASE");
         insertLedgerEntry(transactionId, wallet.id(), "CREDIT", hold.amount(), "BET_RELEASE");
-        insertIdempotencyRecord(command, "RELEASE");
-        return result(holdId, wallet.id(), wallet.availableBalance().add(hold.amount()),
+        WalletOperationResult result = result(holdId, wallet.id(), wallet.availableBalance().add(hold.amount()),
                 wallet.reservedBalance().subtract(hold.amount()), wallet.currency(), false);
+        insertIdempotencyRecord(tenantId, idempotencyKey, "RELEASE", requestHash, result);
+        return result;
     }
 
     @Transactional
     public WalletOperationResult capture(UUID tenantId, UUID holdId, UUID actorId, String idempotencyKey) {
-        WalletOperationResult duplicate = findDuplicate(tenantId, idempotencyKey, "CAPTURE");
+        String requestHash = requestHash(tenantId, holdId, actorId, "CAPTURE");
+        WalletOperationResult duplicate = findDuplicate(tenantId, idempotencyKey, "CAPTURE", requestHash);
         if (duplicate != null) {
             return duplicate;
         }
@@ -99,13 +110,15 @@ public class WalletOperationService {
         WalletCommand command = new WalletCommand(tenantId, hold.playerId(), holdId, hold.amount(), hold.currency(),
                 idempotencyKey, actorId);
         insertTransaction(command, "CAPTURE");
-        insertIdempotencyRecord(command, "CAPTURE");
-        return result(holdId, wallet.id(), wallet.availableBalance(), wallet.reservedBalance(), wallet.currency(), false);
+        WalletOperationResult result = result(holdId, wallet.id(), wallet.availableBalance(), wallet.reservedBalance(), wallet.currency(), false);
+        insertIdempotencyRecord(tenantId, idempotencyKey, "CAPTURE", requestHash, result);
+        return result;
     }
 
     @Transactional
     public WalletOperationResult payout(WalletCommand command) {
-        WalletOperationResult duplicate = findDuplicate(command, "PAYOUT");
+        String requestHash = requestHash(command, "PAYOUT");
+        WalletOperationResult duplicate = findDuplicate(command.tenantId(), command.idempotencyKey(), "PAYOUT", requestHash);
         if (duplicate != null) {
             return duplicate;
         }
@@ -114,9 +127,10 @@ public class WalletOperationService {
         updateBalance(wallet.id(), command.money().amount(), BigDecimal.ZERO);
         UUID transactionId = insertTransaction(command, "PAYOUT");
         insertLedgerEntry(transactionId, wallet.id(), "CREDIT", command.money().amount(), "PAYOUT");
-        insertIdempotencyRecord(command, "PAYOUT");
-        return result(command.referenceId(), wallet.id(), wallet.availableBalance().add(command.money().amount()),
+        WalletOperationResult result = result(command.referenceId(), wallet.id(), wallet.availableBalance().add(command.money().amount()),
                 wallet.reservedBalance(), wallet.currency(), false);
+        insertIdempotencyRecord(command.tenantId(), command.idempotencyKey(), "PAYOUT", requestHash, result);
+        return result;
     }
 
     @Transactional(readOnly = true)
@@ -146,13 +160,13 @@ public class WalletOperationService {
                 wallet.reservedBalance(), activeHoldBalance, balanced);
     }
 
-    private WalletOperationResult findDuplicate(WalletCommand command, String operation) {
-        return findDuplicate(command.tenantId(), command.idempotencyKey(), operation);
-    }
-
-    private WalletOperationResult findDuplicate(UUID tenantId, String idempotencyKey, String operation) {
+    private WalletOperationResult findDuplicate(UUID tenantId, String idempotencyKey, String operation, String requestHash) {
         String sql = """
-                SELECT i.result_reference_id, w.id AS wallet_id, w.available_balance, w.reserved_balance, w.currency
+                SELECT i.operation, i.request_hash, i.result_reference_id,
+                       COALESCE(i.result_wallet_id, w.id) AS wallet_id,
+                       COALESCE(i.result_available_balance, w.available_balance) AS available_balance,
+                       COALESCE(i.result_reserved_balance, w.reserved_balance) AS reserved_balance,
+                       COALESCE(i.result_currency, w.currency) AS currency
                 FROM idempotency_records i
                 LEFT JOIN wallet_accounts w ON w.tenant_id = i.tenant_id AND w.id = COALESCE(
                     (SELECT wallet_account_id FROM wallet_holds h WHERE h.id = i.result_reference_id),
@@ -161,11 +175,16 @@ public class WalletOperationService {
                      WHERE lt.tenant_id = i.tenant_id AND lt.reference_id = i.result_reference_id
                      LIMIT 1)
                 )
-                WHERE i.tenant_id = :tenantId AND i.idempotency_key = :idempotencyKey AND i.operation = :operation
+                WHERE i.tenant_id = :tenantId AND i.idempotency_key = :idempotencyKey
                 """;
-        return jdbcTemplate.query(sql, params(tenantId, idempotencyKey, operation), rows -> {
+        return jdbcTemplate.query(sql, params(tenantId, idempotencyKey), rows -> {
             if (!rows.next()) {
                 return null;
+            }
+            String storedRequestHash = rows.getString("request_hash");
+            if (!operation.equals(rows.getString("operation"))
+                    || (!requestHash.equals(storedRequestHash) && !LEGACY_REQUEST_HASH.equals(storedRequestHash))) {
+                throw new IdempotencyKeyReuseException();
             }
             return result(rows.getObject("result_reference_id", UUID.class),
                     rows.getObject("wallet_id", UUID.class),
@@ -258,18 +277,48 @@ public class WalletOperationService {
                         .addValue("reason", reason));
     }
 
-    private void insertIdempotencyRecord(WalletCommand command, String operation) {
-        jdbcTemplate.update("INSERT INTO idempotency_records (id, tenant_id, idempotency_key, operation, request_hash, result_reference_id) "
-                        + "VALUES (:id, :tenantId, :idempotencyKey, :operation, :requestHash, :resultReferenceId)",
-                new MapSqlParameterSource().addValue("id", UUID.randomUUID()).addValue("tenantId", command.tenantId())
-                        .addValue("idempotencyKey", command.idempotencyKey()).addValue("operation", operation)
-                        .addValue("requestHash", "0000000000000000000000000000000000000000000000000000000000000000")
-                        .addValue("resultReferenceId", command.referenceId()));
+    private void insertIdempotencyRecord(UUID tenantId, String idempotencyKey, String operation,
+            String requestHash, WalletOperationResult result) {
+        jdbcTemplate.update("INSERT INTO idempotency_records (id, tenant_id, idempotency_key, operation, request_hash, "
+                        + "result_reference_id, result_wallet_id, result_available_balance, result_reserved_balance, result_currency) "
+                        + "VALUES (:id, :tenantId, :idempotencyKey, :operation, :requestHash, :resultReferenceId, "
+                        + ":resultWalletId, :resultAvailableBalance, :resultReservedBalance, :resultCurrency)",
+                new MapSqlParameterSource().addValue("id", UUID.randomUUID()).addValue("tenantId", tenantId)
+                        .addValue("idempotencyKey", idempotencyKey).addValue("operation", operation)
+                        .addValue("requestHash", requestHash).addValue("resultReferenceId", result.referenceId())
+                        .addValue("resultWalletId", result.walletId()).addValue("resultAvailableBalance", result.availableBalance())
+                        .addValue("resultReservedBalance", result.reservedBalance()).addValue("resultCurrency", result.currency()));
     }
 
-    private MapSqlParameterSource params(UUID tenantId, String idempotencyKey, String operation) {
-        return new MapSqlParameterSource().addValue("tenantId", tenantId).addValue("idempotencyKey", idempotencyKey)
-                .addValue("operation", operation);
+    private String requestHash(WalletCommand command, String operation) {
+        return sha256(operation, command.tenantId().toString(), command.playerId().toString(),
+                command.referenceId().toString(), command.money().amount().toPlainString(), command.money().currency(),
+                nullableId(command.actorId()));
+    }
+
+    private String requestHash(UUID tenantId, UUID holdId, UUID actorId, String operation) {
+        return sha256(operation, tenantId.toString(), holdId.toString(), nullableId(actorId));
+    }
+
+    private String nullableId(UUID value) {
+        return value == null ? "" : value.toString();
+    }
+
+    private String sha256(String... values) {
+        StringBuilder canonicalRequest = new StringBuilder();
+        for (String value : values) {
+            canonicalRequest.append(value.length()).append(':').append(value);
+        }
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(canonicalRequest.toString().getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 is not available", exception);
+        }
+    }
+
+    private MapSqlParameterSource params(UUID tenantId, String idempotencyKey) {
+        return new MapSqlParameterSource().addValue("tenantId", tenantId).addValue("idempotencyKey", idempotencyKey);
     }
 
     private WalletRow walletRow(ResultSet rs, int rowNum) throws SQLException {
