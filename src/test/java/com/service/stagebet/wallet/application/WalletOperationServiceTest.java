@@ -131,6 +131,58 @@ class WalletOperationServiceTest {
         assertEquals(payout.walletId(), duplicatePayout.walletId());
     }
 
+    @Test
+    void returnsTheOriginalDepositResultAfterLaterWalletActivity() {
+        UUID tenantId = UUID.randomUUID();
+        UUID playerId = UUID.randomUUID();
+        UUID depositId = UUID.randomUUID();
+        WalletCommand deposit = command(tenantId, playerId, depositId, "100.00", "stable-deposit-result");
+
+        WalletOperationResult firstResult = walletOperationService.deposit(deposit);
+        walletOperationService.payout(command(tenantId, playerId, UUID.randomUUID(), "25.00", "later-payout"));
+
+        WalletOperationResult duplicateResult = walletOperationService.deposit(deposit);
+
+        assertTrue(duplicateResult.duplicate());
+        assertEquals(firstResult.referenceId(), duplicateResult.referenceId());
+        assertEquals(firstResult.walletId(), duplicateResult.walletId());
+        assertEquals(firstResult.availableBalance(), duplicateResult.availableBalance());
+        assertEquals(firstResult.reservedBalance(), duplicateResult.reservedBalance());
+    }
+
+    @Test
+    void rejectsAnIdempotencyKeyReusedWithDifferentCommandData() {
+        UUID tenantId = UUID.randomUUID();
+        UUID playerId = UUID.randomUUID();
+        String idempotencyKey = "changed-deposit-request";
+        walletOperationService.deposit(command(tenantId, playerId, UUID.randomUUID(), "10.00", idempotencyKey));
+
+        assertThrows(IdempotencyKeyReuseException.class,
+                () -> walletOperationService.deposit(command(tenantId, playerId, UUID.randomUUID(), "20.00", idempotencyKey)));
+        assertThrows(IdempotencyKeyReuseException.class,
+                () -> walletOperationService.payout(command(tenantId, playerId, UUID.randomUUID(), "10.00", idempotencyKey)));
+    }
+
+    @Test
+    void returnsTheOriginalCaptureResultAfterLaterWalletActivity() {
+        UUID tenantId = UUID.randomUUID();
+        UUID playerId = UUID.randomUUID();
+        walletOperationService.deposit(command(tenantId, playerId, UUID.randomUUID(), "100.00", "capture-deposit"));
+        UUID holdId = UUID.randomUUID();
+        walletOperationService.reserve(command(tenantId, playerId, holdId, "15.00", "capture-reserve"));
+
+        WalletOperationResult firstResult = walletOperationService.capture(tenantId, holdId, null, "stable-capture-result");
+        walletOperationService.payout(command(tenantId, playerId, UUID.randomUUID(), "5.00", "capture-later-payout"));
+
+        WalletOperationResult duplicateResult = walletOperationService.capture(tenantId, holdId, null, "stable-capture-result");
+
+        assertTrue(duplicateResult.duplicate());
+        assertEquals(firstResult.referenceId(), duplicateResult.referenceId());
+        assertEquals(firstResult.walletId(), duplicateResult.walletId());
+        assertEquals(firstResult.availableBalance(), duplicateResult.availableBalance());
+        assertEquals(firstResult.reservedBalance(), duplicateResult.reservedBalance());
+    }
+
     private WalletCommand command(UUID tenantId, UUID playerId, UUID referenceId, String amount, String key) {
         return new WalletCommand(tenantId, playerId, referenceId, new BigDecimal(amount), "USD", key, null);
     }
