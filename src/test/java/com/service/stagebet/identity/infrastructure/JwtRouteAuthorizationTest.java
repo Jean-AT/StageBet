@@ -1,12 +1,15 @@
 package com.service.stagebet.identity.infrastructure;
 
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.service.stagebet.payments.infrastructure.StripeWebhookSignatureVerifier;
 import com.service.stagebet.payments.application.StripeWebhookService;
+import com.service.stagebet.betting.application.BettingService;
+import com.service.stagebet.identity.application.CommandRateLimiter;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -31,6 +34,8 @@ class JwtRouteAuthorizationTest {
     @Autowired private StripeWebhookSignatureVerifier signatureVerifier;
     @MockitoBean private JwtDecoder jwtDecoder;
     @MockitoBean private StripeWebhookService webhookService;
+    @MockitoBean private BettingService bettingService;
+    @MockitoBean private CommandRateLimiter rateLimiter;
 
     @Test
     void protectedApiRejectsMissingAndInvalidTokens() throws Exception {
@@ -70,11 +75,50 @@ class JwtRouteAuthorizationTest {
                 .andExpect(status().isOk());
     }
 
+    @Test
+    void jwtCannotUseAnotherTenantOrPlayersBettingPath() throws Exception {
+        UUID tenantId = UUID.randomUUID();
+        UUID playerId = UUID.randomUUID();
+        when(jwtDecoder.decode("player-token")).thenReturn(token(tenantId, playerId, "PLAYER"));
+
+        mockMvc.perform(post("/api/tenants/{tenantId}/players/{playerId}/rounds/{roundId}/bets",
+                        UUID.randomUUID(), playerId, UUID.randomUUID())
+                        .header("Authorization", "Bearer player-token")
+                        .header("X-Idempotency-Key", "cross-tenant")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"betId\":\"" + UUID.randomUUID()
+                                + "\",\"amount\":10.00,\"currency\":\"USD\",\"expectedRoundSequence\":1}"))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(post("/api/tenants/{tenantId}/players/{playerId}/bets/{betId}/cash-out",
+                        tenantId, UUID.randomUUID(), UUID.randomUUID())
+                        .header("Authorization", "Bearer player-token")
+                        .header("X-Idempotency-Key", "cross-player")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"expectedRoundSequence\":1}"))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(bettingService, rateLimiter);
+    }
+
     private Jwt token(String subject, String role) {
         Instant now = Instant.now();
         return Jwt.withTokenValue(subject)
                 .header("alg", "RS256")
                 .subject(subject)
+                .claim("roles", List.of(role))
+                .issuedAt(now)
+                .expiresAt(now.plusSeconds(300))
+                .build();
+    }
+
+    private Jwt token(UUID tenantId, UUID playerId, String role) {
+        Instant now = Instant.now();
+        return Jwt.withTokenValue(playerId.toString())
+                .header("alg", "RS256")
+                .subject(playerId.toString())
+                .claim("tenant_id", tenantId.toString())
+                .claim("player_id", playerId.toString())
                 .claim("roles", List.of(role))
                 .issuedAt(now)
                 .expiresAt(now.plusSeconds(300))

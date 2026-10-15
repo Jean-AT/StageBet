@@ -12,8 +12,12 @@ import com.service.stagebet.betting.application.BetResult;
 import com.service.stagebet.betting.application.BettingService;
 import com.service.stagebet.betting.domain.BetStatus;
 import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -36,10 +40,25 @@ class BettingControllerTest {
         mockMvc.perform(post("/api/tenants/{tenantId}/players/{playerId}/rounds/{roundId}/bets",
                         tenantId, playerId, roundId)
                 .header("X-Idempotency-Key", "bet-http-duplicate")
+                .principal(principal(tenantId, playerId))
                 .contentType("application/json")
                 .content("{\"betId\":\"" + betId + "\",\"amount\":10.00,\"currency\":\"USD\",\"expectedRoundSequence\":1}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.betId", is(betId.toString())))
                 .andExpect(jsonPath("$.duplicate", is(true)));
+    }
+
+    private JwtAuthenticationToken principal(UUID tenantId, UUID playerId) {
+        Instant now = Instant.now();
+        Jwt jwt = Jwt.withTokenValue("test-token")
+                .header("alg", "RS256")
+                .subject(playerId.toString())
+                .claim("tenant_id", tenantId.toString())
+                .claim("player_id", playerId.toString())
+                .claim("roles", List.of("PLAYER"))
+                .issuedAt(now)
+                .expiresAt(now.plusSeconds(300))
+                .build();
+        return new JwtAuthenticationToken(jwt);
     }
 }
