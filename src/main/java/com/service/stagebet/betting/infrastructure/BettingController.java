@@ -5,6 +5,8 @@ import com.service.stagebet.betting.application.BettingService;
 import com.service.stagebet.betting.application.CashOutCommand;
 import com.service.stagebet.betting.application.PlaceBetCommand;
 import com.service.stagebet.identity.application.CommandRateLimiter;
+import com.service.stagebet.identity.infrastructure.BettingOwnershipAuthorizer;
+import java.security.Principal;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,22 +24,26 @@ public class BettingController {
 
     private final BettingService bettingService;
     private final CommandRateLimiter rateLimiter;
+    private final BettingOwnershipAuthorizer ownershipAuthorizer;
 
     public BettingController(BettingService bettingService) {
-        this(bettingService, null);
+        this(bettingService, null, new BettingOwnershipAuthorizer());
     }
 
     @Autowired
-    public BettingController(BettingService bettingService, CommandRateLimiter rateLimiter) {
+    public BettingController(BettingService bettingService, CommandRateLimiter rateLimiter,
+            BettingOwnershipAuthorizer ownershipAuthorizer) {
         this.bettingService = bettingService;
         this.rateLimiter = rateLimiter;
+        this.ownershipAuthorizer = ownershipAuthorizer;
     }
 
     @PostMapping("/rounds/{roundId}/bets")
     @ResponseStatus(HttpStatus.OK)
     public BetResult placeBet(@PathVariable UUID tenantId, @PathVariable UUID playerId,
             @PathVariable UUID roundId, @RequestHeader("X-Idempotency-Key") String idempotencyKey,
-            @RequestBody PlaceBetRequest request) {
+            @RequestBody PlaceBetRequest request, Principal principal) {
+        ownershipAuthorizer.authorize(principal, tenantId, playerId);
         checkRateLimit(tenantId, playerId);
         return bettingService.placeBet(new PlaceBetCommand(tenantId, playerId, roundId, request.betId(),
                 request.amount(), request.currency(), request.expectedRoundSequence(), idempotencyKey, null));
@@ -47,7 +53,8 @@ public class BettingController {
     @ResponseStatus(HttpStatus.OK)
     public BetResult cashOut(@PathVariable UUID tenantId, @PathVariable UUID playerId,
             @PathVariable UUID betId, @RequestHeader("X-Idempotency-Key") String idempotencyKey,
-            @RequestBody CashOutRequest request) {
+            @RequestBody CashOutRequest request, Principal principal) {
+        ownershipAuthorizer.authorize(principal, tenantId, playerId);
         checkRateLimit(tenantId, playerId);
         return bettingService.cashOut(new CashOutCommand(tenantId, playerId, betId,
                 request.expectedRoundSequence(), idempotencyKey, null));
