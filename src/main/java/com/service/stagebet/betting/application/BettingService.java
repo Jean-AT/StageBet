@@ -1,6 +1,7 @@
 package com.service.stagebet.betting.application;
 
 import com.service.stagebet.betting.domain.BetStatus;
+import com.service.stagebet.game.application.RoundBetSettlement;
 import com.service.stagebet.game.domain.RoundStatus;
 import com.service.stagebet.identity.application.ResponsibleGamingPolicy;
 import com.service.stagebet.messaging.application.EventPayload;
@@ -23,7 +24,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-public class BettingService {
+public class BettingService implements RoundBetSettlement {
 
     private final NamedParameterJdbcTemplate jdbc;
     private final WalletOperationService wallet;
@@ -135,40 +136,64 @@ public class BettingService {
 
     @Transactional
     public int settleCrashedRound(UUID tenantId, UUID roundId, UUID actorId) {
+        return settleCrashedRound(tenantId, roundId, actorId, true);
+    }
+
+    @Override
+    @Transactional
+    public int settleCrashedRound(UUID roundId) {
+        return settleCrashedRound(null, roundId, null, false);
+    }
+
+    private int settleCrashedRound(UUID tenantId, UUID roundId, UUID actorId, boolean restrictTenant) {
         RoundRow round = lockRound(roundId);
         if (round.status() != RoundStatus.CRASHED) {
             throw new IllegalStateException("only a CRASHED round can settle bets");
         }
-        var bets = jdbc.query("SELECT id, round_id, player_id, amount, currency, status, hold_id, accepted_sequence, "
-                + "cash_out_sequence, cash_out_multiplier, payout_amount FROM bets WHERE tenant_id = :tenantId "
-                + "AND round_id = :roundId AND status = 'ACCEPTED' FOR UPDATE",
-                new MapSqlParameterSource().addValue("tenantId", tenantId).addValue("roundId", roundId), this::betRow);
-        for (BetRow bet : bets) {
-            wallet.capture(tenantId, bet.holdId(), actorId, "bet-loss:" + bet.id());
+        var bets = findAcceptedBetsForSettlement(tenantId, roundId, restrictTenant);
+        for (SettlementBetRow bet : bets) {
+            wallet.capture(bet.tenantId(), bet.holdId(), actorId, "bet-loss:" + bet.id());
             jdbc.update("UPDATE bets SET status = 'LOST', settled_at = CURRENT_TIMESTAMP WHERE id = :id",
                     new MapSqlParameterSource("id", bet.id()));
-            publish(bet.withStatus(BetStatus.LOST), round.eventSequence(), null);
+            publish(bet.bet().withStatus(BetStatus.LOST), round.eventSequence(), null);
         }
         return bets.size();
     }
 
     @Transactional
     public int refundCancelledRound(UUID tenantId, UUID roundId, UUID actorId) {
+        return refundCancelledRound(tenantId, roundId, actorId, true);
+    }
+
+    @Override
+    @Transactional
+    public int refundCancelledRound(UUID roundId) {
+        return refundCancelledRound(null, roundId, null, false);
+    }
+
+    private int refundCancelledRound(UUID tenantId, UUID roundId, UUID actorId, boolean restrictTenant) {
         RoundRow round = lockRound(roundId);
         if (round.status() != RoundStatus.CANCELLED) {
             throw new IllegalStateException("only a CANCELLED round can refund bets");
         }
-        var bets = jdbc.query("SELECT id, round_id, player_id, amount, currency, status, hold_id, accepted_sequence, "
-                + "cash_out_sequence, cash_out_multiplier, payout_amount FROM bets WHERE tenant_id = :tenantId "
-                + "AND round_id = :roundId AND status = 'ACCEPTED' FOR UPDATE",
-                new MapSqlParameterSource().addValue("tenantId", tenantId).addValue("roundId", roundId), this::betRow);
-        for (BetRow bet : bets) {
-            wallet.release(tenantId, bet.holdId(), actorId, "bet-refund:" + bet.id());
+        var bets = findAcceptedBetsForSettlement(tenantId, roundId, restrictTenant);
+        for (SettlementBetRow bet : bets) {
+            wallet.release(bet.tenantId(), bet.holdId(), actorId, "bet-refund:" + bet.id());
             jdbc.update("UPDATE bets SET status = 'CANCELLED', settled_at = CURRENT_TIMESTAMP WHERE id = :id",
                     new MapSqlParameterSource("id", bet.id()));
-            publish(bet.withStatus(BetStatus.CANCELLED), round.eventSequence(), bet.amount());
+            publish(bet.bet().withStatus(BetStatus.CANCELLED), round.eventSequence(), bet.amount());
         }
         return bets.size();
+    }
+
+    private java.util.List<SettlementBetRow> findAcceptedBetsForSettlement(UUID tenantId, UUID roundId,
+            boolean restrictTenant) {
+        String tenantFilter = restrictTenant ? " AND tenant_id = :tenantId" : "";
+        return jdbc.query("SELECT tenant_id, id, round_id, player_id, amount, currency, status, hold_id, accepted_sequence, "
+                + "cash_out_sequence, cash_out_multiplier, payout_amount FROM bets WHERE round_id = :roundId "
+                + "AND status = 'ACCEPTED'" + tenantFilter + " FOR UPDATE",
+                new MapSqlParameterSource().addValue("tenantId", tenantId).addValue("roundId", roundId),
+                (rs, rowNum) -> new SettlementBetRow(rs.getObject("tenant_id", UUID.class), betRow(rs, rowNum)));
     }
 
     private void publish(BetRow bet, long sequence, BigDecimal payout) {
@@ -245,6 +270,11 @@ public class BettingService {
     }
 
     private record RoundRow(UUID id, RoundStatus status, long eventSequence, BigDecimal lastMultiplier) { }
+    private record SettlementBetRow(UUID tenantId, BetRow bet) {
+        UUID id() { return bet.id(); }
+        UUID holdId() { return bet.holdId(); }
+        BigDecimal amount() { return bet.amount(); }
+    }
     private record BetRow(UUID id, UUID roundId, UUID playerId, BigDecimal amount, String currency, BetStatus status, UUID holdId,
             long acceptedSequence, Long cashOutSequence, BigDecimal multiplier, BigDecimal payoutAmount) {
         BetRow withCashOut(long sequence, BigDecimal multiplier, BigDecimal payout) {
