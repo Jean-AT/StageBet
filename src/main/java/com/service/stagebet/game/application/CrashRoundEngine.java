@@ -35,18 +35,20 @@ public class CrashRoundEngine {
     private final Clock clock;
     private final Supplier<String> serverSeedSupplier;
     private final OutboxEventStore outbox;
+    private final RoundBetSettlement betSettlement;
     private final Map<UUID, ReentrantLock> roundLocks = new ConcurrentHashMap<>();
 
     public CrashRoundEngine(CrashRoundStore roundStore, CrashPointGenerator crashPointGenerator,
             RoundEventPublisher eventPublisher) {
         this(roundStore, crashPointGenerator, eventPublisher, Clock.systemUTC(), CrashRoundEngine::generateServerSeed,
-                OutboxEventStore.noop());
+                OutboxEventStore.noop(), RoundBetSettlement.noop());
     }
 
     @Autowired
     public CrashRoundEngine(CrashRoundStore roundStore, CrashPointGenerator crashPointGenerator,
-            RoundEventPublisher eventPublisher, OutboxEventStore outbox) {
-        this(roundStore, crashPointGenerator, eventPublisher, Clock.systemUTC(), CrashRoundEngine::generateServerSeed, outbox);
+            RoundEventPublisher eventPublisher, OutboxEventStore outbox, RoundBetSettlement betSettlement) {
+        this(roundStore, crashPointGenerator, eventPublisher, Clock.systemUTC(), CrashRoundEngine::generateServerSeed,
+                outbox, betSettlement);
     }
 
     CrashRoundEngine(CrashRoundStore roundStore, CrashPointGenerator crashPointGenerator,
@@ -57,12 +59,19 @@ public class CrashRoundEngine {
     CrashRoundEngine(CrashRoundStore roundStore, CrashPointGenerator crashPointGenerator,
             RoundEventPublisher eventPublisher, Clock clock, Supplier<String> serverSeedSupplier,
             OutboxEventStore outbox) {
+        this(roundStore, crashPointGenerator, eventPublisher, clock, serverSeedSupplier, outbox, RoundBetSettlement.noop());
+    }
+
+    CrashRoundEngine(CrashRoundStore roundStore, CrashPointGenerator crashPointGenerator,
+            RoundEventPublisher eventPublisher, Clock clock, Supplier<String> serverSeedSupplier,
+            OutboxEventStore outbox, RoundBetSettlement betSettlement) {
         this.roundStore = roundStore;
         this.crashPointGenerator = crashPointGenerator;
         this.eventPublisher = eventPublisher;
         this.clock = clock;
         this.serverSeedSupplier = serverSeedSupplier;
         this.outbox = outbox;
+        this.betSettlement = betSettlement;
     }
 
     @Transactional
@@ -106,7 +115,23 @@ public class CrashRoundEngine {
 
     @Transactional
     public RoundEvent settleRound(UUID roundId) {
+        CrashRound currentRound = lockRound(roundId);
+        if (currentRound.status() == RoundStatus.SETTLED) {
+            return terminalEvent(currentRound);
+        }
+        betSettlement.settleCrashedRound(roundId);
         return mutate(roundId, round -> round.settle(clock.instant()));
+    }
+
+    @Transactional
+    public RoundEvent cancelRound(UUID roundId) {
+        CrashRound currentRound = lockRound(roundId);
+        if (currentRound.status() == RoundStatus.CANCELLED) {
+            return terminalEvent(currentRound);
+        }
+        RoundEvent event = mutate(roundId, round -> round.cancel(clock.instant()));
+        betSettlement.refundCancelledRound(roundId);
+        return event;
     }
 
     @Transactional(readOnly = true)
@@ -135,6 +160,17 @@ public class CrashRoundEngine {
                 roundLocks.remove(roundId, lock);
             }
         }
+    }
+
+    private CrashRound lockRound(UUID roundId) {
+        return roundStore.findByIdForUpdate(roundId)
+                .orElseThrow(() -> new IllegalArgumentException("round does not exist: " + roundId));
+    }
+
+    private RoundEvent terminalEvent(CrashRound round) {
+        CrashRoundSnapshot snapshot = round.snapshot();
+        return new RoundEvent(snapshot.id(), snapshot.eventSequence(), snapshot.status(), snapshot.lastMultiplier(),
+                snapshot.status() == RoundStatus.SETTLED ? snapshot.settledAt() : snapshot.scheduledAt());
     }
 
     private static String generateServerSeed() {
