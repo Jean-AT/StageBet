@@ -1,9 +1,11 @@
 package com.service.stagebet.payments.application;
 
 import java.util.UUID;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 @Component
+@ConditionalOnProperty(prefix = "stagebet.payments.stripe", name = "enabled", havingValue = "false", matchIfMissing = true)
 public class FakePaymentGateway implements PaymentGateway {
 
     @Override
@@ -13,7 +15,7 @@ public class FakePaymentGateway implements PaymentGateway {
     }
 
     @Override
-    public RefundResult refund(RefundCommand command) {
+    public RefundResult refund(ProviderRefundCommand command) {
         return new RefundResult("FAKE", "fake_re_" + command.idempotencyKey(), command.amount(),
                 command.currency().toUpperCase(), "SUCCEEDED");
     }
