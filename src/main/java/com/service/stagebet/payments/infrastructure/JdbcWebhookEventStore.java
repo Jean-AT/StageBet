@@ -1,6 +1,7 @@
 package com.service.stagebet.payments.infrastructure;
 
 import com.service.stagebet.payments.application.WebhookEventStore;
+import java.sql.Timestamp;
 import java.time.Instant;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -16,12 +17,13 @@ public class JdbcWebhookEventStore implements WebhookEventStore {
     }
 
     @Override
-    public boolean claim(String eventId, Instant receivedAt) {
+    public boolean claim(String eventId, String eventType, String paymentReference, Instant receivedAt) {
         return jdbc.update("""
-                INSERT INTO payment_webhook_events (event_id, received_at)
-                VALUES (:eventId, :receivedAt)
+                INSERT INTO payment_webhook_events (event_id, event_type, payment_reference, received_at)
+                VALUES (:eventId, :eventType, :paymentReference, :receivedAt)
                 ON CONFLICT (event_id) DO NOTHING
                 """, new MapSqlParameterSource().addValue("eventId", eventId)
-                .addValue("receivedAt", receivedAt)) == 1;
+                .addValue("eventType", eventType).addValue("paymentReference", paymentReference)
+                .addValue("receivedAt", Timestamp.from(receivedAt))) == 1;
     }
 }

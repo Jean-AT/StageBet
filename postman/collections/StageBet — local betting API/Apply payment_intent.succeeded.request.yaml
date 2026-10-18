@@ -1,0 +1,33 @@
+$kind: http-request
+description: Applies succeeded to the matching stored STRIPE_SANDBOX PaymentIntent. Send this before the replay request.
+url: "{{baseUrl}}/api/payments/webhooks/stripe"
+method: POST
+headers:
+  Content-Type: application/json
+  Stripe-Signature: set by pre-request script
+body:
+  type: json
+  content: "{}"
+auth:
+  type: noauth
+scripts:
+  - type: beforeRequest
+    code: |-
+      const eventId = pm.collectionVariables.get('stripeWebhookEventId') || pm.variables.replaceIn('evt_{{$guid}}');
+      pm.collectionVariables.set('stripeWebhookEventId', eventId);
+      const payload = JSON.stringify({ id: eventId, type: 'payment_intent.succeeded', data: { object: { id: pm.collectionVariables.get('providerPaymentIntentId'), status: 'succeeded' } } });
+      const timestamp = Math.floor(Date.now() / 1000);
+      const secret = pm.collectionVariables.get('stripeWebhookSecret');
+      if (!secret) { throw new Error('Set stripeWebhookSecret before sending this request'); }
+      const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+      const bytes = new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${timestamp}.${payload}`)));
+      const signature = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+      pm.request.body.update(payload);
+      pm.request.headers.upsert({ key: 'Stripe-Signature', value: `t=${timestamp},v1=${signature}` });
+    language: text/javascript
+  - type: afterResponse
+    code: |-
+      pm.test('Webhook state was applied once', function () { pm.response.to.have.status(200); });
+      pm.test('Webhook reports APPLIED', function () { pm.expect(pm.response.json().status).to.eql('APPLIED'); });
+    language: text/javascript
+order: 4000

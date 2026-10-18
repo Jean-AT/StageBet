@@ -1,0 +1,38 @@
+$kind: http-request
+description: Requires valid JWT authentication, a funded player wallet, and an OPEN round. Set tenantId, playerId, roundId, and accessToken first.
+url: "{{baseUrl}}/api/tenants/{{tenantId}}/players/{{playerId}}/rounds/{{roundId}}/bets"
+method: POST
+headers:
+  - key: Content-Type
+    value: application/json
+  - key: X-Idempotency-Key
+    value: postman-bet-{{betId}}
+    description: Reuse this key for a retry; clear betId for a new bet.
+body:
+  type: json
+  content: |-
+    {
+      "betId": "{{betId}}",
+      "amount": "10.00",
+      "currency": "USD",
+      "expectedRoundSequence": 1
+    }
+scripts:
+  - type: beforeRequest
+    code: |-
+      if (!pm.collectionVariables.get('betId')) {
+          pm.collectionVariables.set('betId', pm.variables.replaceIn('{{$guid}}'));
+      }
+    language: text/javascript
+  - type: afterResponse
+    code: |-
+      pm.test('Bet accepted', function () { pm.response.to.have.status(200); });
+      if (pm.response.code === 200) {
+          const result = pm.response.json();
+          pm.test('Bet belongs to the requested player and round', function () {
+              pm.expect(result.playerId).to.eql(pm.collectionVariables.get('playerId'));
+              pm.expect(result.roundId).to.eql(pm.collectionVariables.get('roundId'));
+          });
+      }
+    language: text/javascript
+order: 2000
