@@ -1,0 +1,27 @@
+$kind: http-request
+description: Confirms a handler failure returns 500 and does not permanently claim the event, allowing a later retry.
+url: "{{baseUrl}}/api/payments/webhooks/stripe"
+method: POST
+headers:
+  Content-Type: application/json
+  Stripe-Signature: set by pre-request script
+body:
+  type: json
+  content: "{}"
+auth:
+  type: noauth
+scripts:
+  - type: beforeRequest
+    code: |-
+      const payload = JSON.stringify({ id: pm.variables.replaceIn('evt_{{$guid}}'), type: 'payment_intent.succeeded', data: { object: { id: `pi_missing_${pm.variables.replaceIn('{{$guid}}')}`, status: 'succeeded' } } });
+      const timestamp = Math.floor(Date.now() / 1000);
+      const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(pm.collectionVariables.get('stripeWebhookSecret')), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+      const bytes = new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${timestamp}.${payload}`)));
+      const signature = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+      pm.request.body.update(payload);
+      pm.request.headers.upsert({ key: 'Stripe-Signature', value: `t=${timestamp},v1=${signature}` });
+    language: text/javascript
+  - type: afterResponse
+    code: pm.test('Unknown payment is retryable', function () { pm.response.to.have.status(500); });
+    language: text/javascript
+order: 6000

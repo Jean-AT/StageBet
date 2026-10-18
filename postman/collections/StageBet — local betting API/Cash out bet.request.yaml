@@ -1,0 +1,23 @@
+$kind: http-request
+description: Requires valid JWT authentication and an accepted bet in a RUNNING round. Adjust expectedRoundSequence if the round has ticked.
+url: "{{baseUrl}}/api/tenants/{{tenantId}}/players/{{playerId}}/bets/{{betId}}/cash-out"
+method: POST
+headers:
+  - key: Content-Type
+    value: application/json
+  - key: X-Idempotency-Key
+    value: postman-cashout-{{betId}}
+    description: Reuse this key for a retry.
+body:
+  type: json
+  content: |-
+    {
+      "expectedRoundSequence": 2
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Cash-out accepted', function () { pm.response.to.have.status(200); });
+      if (pm.response.code === 200) { pm.test('Bet is cashed out', function () { pm.expect(pm.response.json().status).to.eql('CASHED_OUT'); }); }
+    language: text/javascript
+order: 3000

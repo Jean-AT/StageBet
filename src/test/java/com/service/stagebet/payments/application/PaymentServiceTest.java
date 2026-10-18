@@ -89,6 +89,16 @@ class PaymentServiceTest {
             return refund;
         }
 
+        @Override
+        public boolean updatePaymentIntentStatus(String provider, String providerReference, String status) {
+            return paymentIntentsById.values().stream()
+                    .filter(paymentIntent -> paymentIntent.provider().equals(provider)
+                            && paymentIntent.providerReference().equals(providerReference))
+                    .findFirst()
+                    .map(paymentIntent -> true)
+                    .orElse(false);
+        }
+
         private String paymentKey(UUID tenantId, String idempotencyKey) {
             return tenantId + ":" + idempotencyKey;
         }

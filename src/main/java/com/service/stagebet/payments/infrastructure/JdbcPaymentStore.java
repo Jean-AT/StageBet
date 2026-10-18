@@ -58,6 +58,16 @@ public class JdbcPaymentStore implements PaymentStore {
         return refund;
     }
 
+    @Override
+    public boolean updatePaymentIntentStatus(String provider, String providerReference, String status) {
+        return jdbc.update("""
+                UPDATE payment_intents
+                SET status = :status
+                WHERE provider = :provider AND provider_reference = :providerReference
+                """, new MapSqlParameterSource().addValue("provider", provider)
+                .addValue("providerReference", providerReference).addValue("status", status)) == 1;
+    }
+
     private Optional<StoredPaymentIntent> findPaymentIntent(String predicate, MapSqlParameterSource parameters) {
         return jdbc.query("SELECT id, tenant_id, player_id, provider, provider_reference, amount, currency, status, idempotency_key "
                         + "FROM payment_intents WHERE " + predicate, parameters,

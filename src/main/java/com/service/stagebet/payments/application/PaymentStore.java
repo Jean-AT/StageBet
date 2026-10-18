@@ -16,6 +16,8 @@ public interface PaymentStore {
 
     StoredRefund saveRefund(StoredRefund refund);
 
+    boolean updatePaymentIntentStatus(String provider, String providerReference, String status);
+
     record StoredPaymentIntent(UUID paymentId, UUID tenantId, UUID playerId, String provider,
             String providerReference, BigDecimal amount, String currency, String status, String idempotencyKey) {
     }

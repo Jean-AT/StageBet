@@ -4,5 +4,5 @@ import java.time.Instant;
 
 public interface WebhookEventStore {
 
-    boolean claim(String eventId, Instant receivedAt);
+    boolean claim(String eventId, String eventType, String paymentReference, Instant receivedAt);
 }

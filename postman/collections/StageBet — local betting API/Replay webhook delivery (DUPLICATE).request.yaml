@@ -1,0 +1,29 @@
+$kind: http-request
+description: Reuses the event ID created by Apply and returns DUPLICATE without applying the payment state a second time.
+url: "{{baseUrl}}/api/payments/webhooks/stripe"
+method: POST
+headers:
+  Content-Type: application/json
+  Stripe-Signature: set by pre-request script
+body:
+  type: json
+  content: "{}"
+auth:
+  type: noauth
+scripts:
+  - type: beforeRequest
+    code: |-
+      const eventId = pm.collectionVariables.get('stripeWebhookEventId');
+      if (!eventId) { throw new Error('Send Apply payment_intent.succeeded first'); }
+      const payload = JSON.stringify({ id: eventId, type: 'payment_intent.succeeded', data: { object: { id: pm.collectionVariables.get('providerPaymentIntentId'), status: 'succeeded' } } });
+      const timestamp = Math.floor(Date.now() / 1000);
+      const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(pm.collectionVariables.get('stripeWebhookSecret')), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+      const bytes = new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${timestamp}.${payload}`)));
+      const signature = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+      pm.request.body.update(payload);
+      pm.request.headers.upsert({ key: 'Stripe-Signature', value: `t=${timestamp},v1=${signature}` });
+    language: text/javascript
+  - type: afterResponse
+    code: pm.test('Webhook replay is a duplicate', function () { pm.response.to.have.status(200); pm.expect(pm.response.json().status).to.eql('DUPLICATE'); });
+    language: text/javascript
+order: 5000
