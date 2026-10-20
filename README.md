@@ -4,7 +4,7 @@ StageBet is a Java 21/Spring Boot modular monolith for a virtual-credit Crash ga
 It demonstrates wallet correctness, idempotent betting, responsible gaming, reliable
 outbox delivery, signed payment webhooks, and production-oriented observability.
 
-It does not process real money. Stripe support is sandbox-only and disabled by default.
+It does not process real money. Stripe support is sandbox-only and disabled by default
 
 ## Architecture
 
