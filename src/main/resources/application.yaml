@@ -50,6 +50,7 @@ stagebet:
       enabled: ${STRIPE_SANDBOX_ENABLED:false}
       base-url: ${STRIPE_SANDBOX_BASE_URL:https://api.stripe.com}
       secret-key: ${STRIPE_SANDBOX_SECRET_KEY:}
+      publishable-key: ${STRIPE_SANDBOX_PUBLISHABLE_KEY:}
       webhook-secret: ${STRIPE_SANDBOX_WEBHOOK_SECRET:local-webhook-secret}
       signature-tolerance-seconds: ${STRIPE_WEBHOOK_TOLERANCE_SECONDS:300}
   rate-limit:

@@ -15,6 +15,16 @@ public class FakePaymentGateway implements PaymentGateway {
     }
 
     @Override
+    public CheckoutSession prepareCheckout(ProviderCheckoutCommand command) {
+        throw new IllegalStateException("Stripe Sandbox checkout is disabled");
+    }
+
+    @Override
+    public PaymentConfirmation confirmPaymentIntent(ProviderConfirmationCommand command) {
+        throw new IllegalStateException("Stripe Sandbox checkout is disabled");
+    }
+
+    @Override
     public RefundResult refund(ProviderRefundCommand command) {
         return new RefundResult("FAKE", "fake_re_" + command.idempotencyKey(), command.amount(),
                 command.currency().toUpperCase(), "SUCCEEDED");

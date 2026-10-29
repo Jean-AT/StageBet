@@ -81,6 +81,26 @@ curl -X POST http://localhost:8080/api/tenants/$TENANT_ID/players/$PLAYER_ID/rou
 Stripe Sandbox webhooks must include a valid `Stripe-Signature` header. Duplicate event
 IDs return `DUPLICATE` without applying the event twice.
 
+### Stripe Sandbox checkout demo
+
+This is an educational test-card flow only; it does not fund a wallet or permit real-money
+gambling. Set the following environment variables from your Stripe **test-mode** dashboard,
+then start the app:
+
+```bash
+export STRIPE_SANDBOX_ENABLED=true
+export STRIPE_SANDBOX_SECRET_KEY=sk_test_...
+export STRIPE_SANDBOX_PUBLISHABLE_KEY=pk_test_...
+```
+
+Open `http://localhost:8080/stripe-sandbox-checkout.html`, paste a PLAYER Keycloak token
+and its matching tenant/player IDs, then create a checkout. The page uses Stripe Elements:
+card details go directly to Stripe and StageBet receives only a `pm_...` PaymentMethod ID.
+Use `4242 4242 4242 4242` for success, `4000 0000 0000 9995` for a decline, and
+`4000 0025 0000 3155` to exercise 3DS. Confirmation responses and signed webhooks both
+persist the provider status; retries use `X-Idempotency-Key`. Never commit Stripe keys,
+tokens, client secrets, or card details.
+
 ### Postman
 
 Import `postman/StageBet-webhook-manual-tests.postman_collection.json` into the Postman desktop app, or open the connected collection under `postman/collections/`. It

@@ -60,6 +60,49 @@ class StripeSandboxPaymentGatewayContractTest {
     }
 
     @Test
+    void retrievesAClientSecretAndConfirmsTheStoredRemoteIntentWithThePaymentMethod() {
+        stripe.stubFor(com.github.tomakehurst.wiremock.client.WireMock.get(urlEqualTo("/v1/payment_intents/pi_remote_123"))
+                .willReturn(aResponse().withHeader("Content-Type", "application/json")
+                        .withBody("{\"id\":\"pi_remote_123\",\"status\":\"requires_payment_method\",\"client_secret\":\"pi_remote_123_secret\"}")));
+        stripe.stubFor(post(urlEqualTo("/v1/payment_intents/pi_remote_123/confirm"))
+                .withHeader("Idempotency-Key", equalTo("confirm-key"))
+                .withRequestBody(containing("payment_method=pm_card_visa"))
+                .willReturn(aResponse().withHeader("Content-Type", "application/json")
+                        .withBody("{\"id\":\"pi_remote_123\",\"status\":\"succeeded\",\"client_secret\":\"pi_remote_123_secret\"}")));
+
+        PaymentGateway.CheckoutSession checkout = gateway.prepareCheckout(new PaymentGateway.ProviderCheckoutCommand(
+                UUID.randomUUID(), UUID.randomUUID(), "pi_remote_123"));
+        PaymentGateway.PaymentConfirmation confirmation = gateway.confirmPaymentIntent(
+                new PaymentGateway.ProviderConfirmationCommand(UUID.randomUUID(), checkout.paymentId(), "pi_remote_123",
+                        "pm_card_visa", "confirm-key"));
+
+        assertEquals("pi_remote_123_secret", checkout.clientSecret());
+        assertEquals("succeeded", confirmation.status());
+    }
+
+    @Test
+    void rejectsAnythingOtherThanAStripePaymentMethodId() {
+        assertThrows(IllegalArgumentException.class, () -> gateway.confirmPaymentIntent(
+                new PaymentGateway.ProviderConfirmationCommand(UUID.randomUUID(), UUID.randomUUID(), "pi_remote_123",
+                        "4242424242424242", "confirm-key")));
+    }
+
+    @Test
+    void returnsStripeDeclinesWithoutPretendingThePaymentSucceeded() {
+        stripe.stubFor(post(urlEqualTo("/v1/payment_intents/pi_declined/confirm"))
+                .withHeader("Idempotency-Key", equalTo("decline-key"))
+                .willReturn(aResponse().withHeader("Content-Type", "application/json")
+                        .withBody("{\"id\":\"pi_declined\",\"status\":\"requires_payment_method\",\"client_secret\":\"pi_declined_secret\"}")));
+
+        PaymentGateway.PaymentConfirmation confirmation = gateway.confirmPaymentIntent(
+                new PaymentGateway.ProviderConfirmationCommand(UUID.randomUUID(), UUID.randomUUID(), "pi_declined",
+                        "pm_card_chargeDeclined", "decline-key"));
+
+        assertEquals("requires_payment_method", confirmation.status());
+        assertEquals("pi_declined_secret", confirmation.clientSecret());
+    }
+
+    @Test
     void refundsTheRemoteIntentAndReturnsTheRemoteRefundReference() {
         stripe.stubFor(post(urlEqualTo("/v1/refunds"))
                 .withHeader("Idempotency-Key", equalTo("refund-key"))

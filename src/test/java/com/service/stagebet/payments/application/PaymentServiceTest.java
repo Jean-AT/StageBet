@@ -48,6 +48,18 @@ class PaymentServiceTest {
         }
 
         @Override
+        public CheckoutSession prepareCheckout(ProviderCheckoutCommand command) {
+            return new CheckoutSession("STRIPE_SANDBOX", command.providerPaymentIntentId(), command.paymentId(),
+                    "pi_remote_123_secret", "requires_payment_method");
+        }
+
+        @Override
+        public PaymentConfirmation confirmPaymentIntent(ProviderConfirmationCommand command) {
+            return new PaymentConfirmation("STRIPE_SANDBOX", command.providerPaymentIntentId(), command.paymentId(),
+                    "succeeded", null);
+        }
+
+        @Override
         public RefundResult refund(ProviderRefundCommand command) {
             refundCalls++;
             refundPaymentIntentId = command.providerPaymentIntentId();

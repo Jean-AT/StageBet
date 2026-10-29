@@ -29,6 +29,40 @@ public class PaymentService {
                 .orElseGet(() -> refundStoredPayment(command));
     }
 
+    @Transactional
+    public PaymentGateway.CheckoutSession prepareSandboxCheckout(PaymentGateway.PaymentCommand command) {
+        PaymentGateway.PaymentIntent paymentIntent = createPaymentIntent(command);
+        requireStripeSandbox(paymentIntent.provider());
+        return paymentGateway.prepareCheckout(new PaymentGateway.ProviderCheckoutCommand(command.tenantId(),
+                paymentIntent.paymentId(), paymentIntent.providerReference()));
+    }
+
+    @Transactional
+    public PaymentGateway.PaymentConfirmation confirmSandboxCheckout(UUID tenantId, UUID playerId, UUID paymentId,
+            String paymentMethodId, String idempotencyKey) {
+        PaymentStore.StoredPaymentIntent paymentIntent = paymentStore.findPaymentIntent(tenantId, paymentId)
+                .orElseThrow(() -> new IllegalArgumentException("payment intent does not exist for this tenant"));
+        if (!paymentIntent.playerId().equals(playerId)) {
+            throw new IllegalArgumentException("payment intent does not belong to this player");
+        }
+        requireStripeSandbox(paymentIntent.provider());
+        if ("succeeded".equalsIgnoreCase(paymentIntent.status())) {
+            return new PaymentGateway.PaymentConfirmation(paymentIntent.provider(), paymentIntent.providerReference(),
+                    paymentIntent.paymentId(), paymentIntent.status(), null);
+        }
+        PaymentGateway.PaymentConfirmation confirmation = paymentGateway.confirmPaymentIntent(
+                new PaymentGateway.ProviderConfirmationCommand(tenantId, paymentId, paymentIntent.providerReference(),
+                        paymentMethodId, idempotencyKey));
+        paymentStore.updatePaymentIntentStatus(confirmation.provider(), confirmation.providerReference(), confirmation.status());
+        return confirmation;
+    }
+
+    private void requireStripeSandbox(String provider) {
+        if (!"STRIPE_SANDBOX".equals(provider)) {
+            throw new IllegalStateException("Stripe Sandbox checkout is not enabled for this payment");
+        }
+    }
+
     private PaymentGateway.PaymentIntent savePaymentIntent(PaymentGateway.PaymentCommand command,
             PaymentGateway.PaymentIntent paymentIntent) {
         PaymentStore.StoredPaymentIntent stored = paymentStore.savePaymentIntent(new PaymentStore.StoredPaymentIntent(

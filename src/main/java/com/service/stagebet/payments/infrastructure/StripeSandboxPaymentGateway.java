@@ -66,7 +66,37 @@ public class StripeSandboxPaymentGateway implements PaymentGateway {
                 command.currency().toUpperCase(), response.status());
     }
 
-    private record StripePaymentIntent(String id, String status) {
+    @Override
+    public CheckoutSession prepareCheckout(ProviderCheckoutCommand command) {
+        StripePaymentIntent response = client.get().uri("/v1/payment_intents/{id}", command.providerPaymentIntentId())
+                .retrieve().body(StripePaymentIntent.class);
+        return checkoutSession(command, response);
+    }
+
+    @Override
+    public PaymentConfirmation confirmPaymentIntent(ProviderConfirmationCommand command) {
+        if (command.paymentMethodId() == null || !command.paymentMethodId().startsWith("pm_")) {
+            throw new IllegalArgumentException("Stripe checkout requires a PaymentMethod id");
+        }
+        MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
+        form.add("payment_method", command.paymentMethodId());
+        StripePaymentIntent response = client.post().uri("/v1/payment_intents/{id}/confirm", command.providerPaymentIntentId())
+                .header("Idempotency-Key", command.idempotencyKey()).body(form).retrieve().body(StripePaymentIntent.class);
+        if (response == null || response.id() == null || response.status() == null || response.status().isBlank()) {
+            throw new IllegalStateException("Stripe returned an incomplete PaymentIntent confirmation");
+        }
+        return new PaymentConfirmation("STRIPE_SANDBOX", response.id(), command.paymentId(), response.status(), response.clientSecret());
+    }
+
+    private CheckoutSession checkoutSession(ProviderCheckoutCommand command, StripePaymentIntent response) {
+        if (response == null || response.id() == null || response.clientSecret() == null || response.clientSecret().isBlank()
+                || response.status() == null || response.status().isBlank()) {
+            throw new IllegalStateException("Stripe returned an incomplete PaymentIntent checkout response");
+        }
+        return new CheckoutSession("STRIPE_SANDBOX", response.id(), command.paymentId(), response.clientSecret(), response.status());
+    }
+
+    private record StripePaymentIntent(String id, String status, @com.fasterxml.jackson.annotation.JsonProperty("client_secret") String clientSecret) {
     }
 
     private record StripeRefund(String id, String status) {

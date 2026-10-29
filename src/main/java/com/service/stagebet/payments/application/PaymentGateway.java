@@ -7,6 +7,10 @@ public interface PaymentGateway {
 
     PaymentIntent createPaymentIntent(PaymentCommand command);
 
+    CheckoutSession prepareCheckout(ProviderCheckoutCommand command);
+
+    PaymentConfirmation confirmPaymentIntent(ProviderConfirmationCommand command);
+
     RefundResult refund(ProviderRefundCommand command);
 
     record PaymentCommand(UUID tenantId, UUID playerId, BigDecimal amount, String currency, String idempotencyKey) {
@@ -19,10 +23,24 @@ public interface PaymentGateway {
             String currency, String idempotencyKey) {
     }
 
+    record ProviderCheckoutCommand(UUID tenantId, UUID paymentId, String providerPaymentIntentId) {
+    }
+
+    record ProviderConfirmationCommand(UUID tenantId, UUID paymentId, String providerPaymentIntentId,
+            String paymentMethodId, String idempotencyKey) {
+    }
+
     record PaymentIntent(String provider, String providerReference, UUID paymentId, BigDecimal amount,
             String currency, String status) {
     }
 
     record RefundResult(String provider, String providerReference, BigDecimal amount, String currency, String status) {
+    }
+
+    record CheckoutSession(String provider, String providerReference, UUID paymentId, String clientSecret, String status) {
+    }
+
+    record PaymentConfirmation(String provider, String providerReference, UUID paymentId, String status,
+            String clientSecret) {
     }
 }
