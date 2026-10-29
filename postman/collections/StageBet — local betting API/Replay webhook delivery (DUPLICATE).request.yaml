@@ -26,4 +26,4 @@ scripts:
   - type: afterResponse
     code: pm.test('Webhook replay is a duplicate', function () { pm.response.to.have.status(200); pm.expect(pm.response.json().status).to.eql('DUPLICATE'); });
     language: text/javascript
-order: 5000
+order: 6000
