@@ -20,4 +20,4 @@ scripts:
       pm.test('Cash-out accepted', function () { pm.response.to.have.status(200); });
       if (pm.response.code === 200) { pm.test('Bet is cashed out', function () { pm.expect(pm.response.json().status).to.eql('CASHED_OUT'); }); }
     language: text/javascript
-order: 3000
+order: 4000
