@@ -30,4 +30,4 @@ scripts:
       pm.test('Webhook state was applied once', function () { pm.response.to.have.status(200); });
       pm.test('Webhook reports APPLIED', function () { pm.expect(pm.response.json().status).to.eql('APPLIED'); });
     language: text/javascript
-order: 4000
+order: 5000

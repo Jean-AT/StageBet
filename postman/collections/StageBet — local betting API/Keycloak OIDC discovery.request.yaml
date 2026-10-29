@@ -1,0 +1,14 @@
+$kind: http-request
+description: "Checks the local Keycloak issuer that supplies signed JWTs. Start it with: docker compose --profile oidc up -d."
+url: "{{oidcIssuerUrl}}/.well-known/openid-configuration"
+method: GET
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('OIDC discovery is available', function () { pm.response.to.have.status(200); });
+      pm.test('StageBet issuer is returned', function () { pm.expect(pm.response.json().issuer).to.eql(pm.collectionVariables.get('oidcIssuerUrl')); });
+      pm.test('Authorization and token endpoints are advertised', function () { const document = pm.response.json(); pm.expect(document.authorization_endpoint).to.be.a('string'); pm.expect(document.token_endpoint).to.be.a('string'); });
+    language: text/javascript
+order: 2000

@@ -40,6 +40,11 @@ logging:
   pattern:
     level: "%5p [corr:%X{correlationId:-}]"
 stagebet:
+  security:
+    oidc:
+      issuer-uri: ${STAGEBET_OIDC_ISSUER_URI:http://localhost:8180/realms/stagebet}
+      jwk-set-uri: ${STAGEBET_OIDC_JWK_SET_URI:http://localhost:8180/realms/stagebet/protocol/openid-connect/certs}
+      audience: ${STAGEBET_OIDC_AUDIENCE:stagebet-api}
   payments:
     stripe:
       enabled: ${STRIPE_SANDBOX_ENABLED:false}
